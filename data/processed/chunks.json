@@ -1,0 +1,18 @@
+[
+  {
+    "chunk_id": "experience-1",
+    "doc_id": "experience",
+    "title": "Experience",
+    "section": "general",
+    "source": "/portfolio/experience.md",
+    "text": "# Experience I have built production-grade data pipelines and analytics services. My work focuses on reliability, maintainability, and measurable outcomes."
+  },
+  {
+    "chunk_id": "projects-1",
+    "doc_id": "projects",
+    "title": "Projects",
+    "section": "general",
+    "source": "/portfolio/projects.md",
+    "text": "# Projects I built a retrieval-first chatbot service for portfolio documents. The system supports corpus-level and document-level filtering at query time. It is designed for easy integration into other apps using a simple API."
+  }
+]

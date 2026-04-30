@@ -1,0 +1,26 @@
+[
+  {
+    "chunk_id": "c1",
+    "doc_id": "projects",
+    "title": "Projects Overview",
+    "section": "AI Work",
+    "source": "/portfolio/projects",
+    "text": "Built a retrieval-first chatbot for portfolio docs using BM25 search and source-grounded snippets."
+  },
+  {
+    "chunk_id": "c2",
+    "doc_id": "experience",
+    "title": "Experience Summary",
+    "section": "Data Engineering",
+    "source": "/portfolio/experience",
+    "text": "Implemented ETL pipelines, feature stores, and analytics dashboards for production teams."
+  },
+  {
+    "chunk_id": "c3",
+    "doc_id": "skills",
+    "title": "Skills",
+    "section": "Backend",
+    "source": "/portfolio/skills",
+    "text": "Python, FastAPI, search ranking, and API integration for reusable backend services."
+  }
+]

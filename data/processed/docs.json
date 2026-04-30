@@ -1,0 +1,18 @@
+[
+  {
+    "doc_id": "experience",
+    "title": "Experience",
+    "section": "general",
+    "source": "/portfolio/experience.md",
+    "text": "# Experience\n\nI have built production-grade data pipelines and analytics services.\nMy work focuses on reliability, maintainability, and measurable outcomes.",
+    "updated_at": "2026-04-30T10:49:08.242431+00:00"
+  },
+  {
+    "doc_id": "projects",
+    "title": "Projects",
+    "section": "general",
+    "source": "/portfolio/projects.md",
+    "text": "# Projects\n\nI built a retrieval-first chatbot service for portfolio documents.\nThe system supports corpus-level and document-level filtering at query time.\nIt is designed for easy integration into other apps using a simple API.",
+    "updated_at": "2026-04-30T10:49:08.242522+00:00"
+  }
+]

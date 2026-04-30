@@ -1,0 +1,392 @@
+{
+  "corpus_id": "default",
+  "bm25": {
+    "k1": 1.2,
+    "b": 0.75
+  },
+  "stats": {
+    "total_chunks": 2,
+    "avg_chunk_length": 28.0
+  },
+  "chunk_lengths": {
+    "experience-1": 20,
+    "projects-1": 36
+  },
+  "idf": {
+    "experience": 0.6931471805599453,
+    "i": 0.1823215567939546,
+    "have": 0.6931471805599453,
+    "built": 0.1823215567939546,
+    "production": 0.6931471805599453,
+    "grade": 0.6931471805599453,
+    "data": 0.6931471805599453,
+    "pipelines": 0.6931471805599453,
+    "and": 0.1823215567939546,
+    "analytics": 0.6931471805599453,
+    "services": 0.6931471805599453,
+    "my": 0.6931471805599453,
+    "work": 0.6931471805599453,
+    "focuses": 0.6931471805599453,
+    "on": 0.6931471805599453,
+    "reliability": 0.6931471805599453,
+    "maintainability": 0.6931471805599453,
+    "measurable": 0.6931471805599453,
+    "outcomes": 0.6931471805599453,
+    "projects": 0.6931471805599453,
+    "a": 0.6931471805599453,
+    "retrieval": 0.6931471805599453,
+    "first": 0.6931471805599453,
+    "chatbot": 0.6931471805599453,
+    "service": 0.6931471805599453,
+    "for": 0.6931471805599453,
+    "portfolio": 0.6931471805599453,
+    "documents": 0.6931471805599453,
+    "the": 0.6931471805599453,
+    "system": 0.6931471805599453,
+    "supports": 0.6931471805599453,
+    "corpus": 0.6931471805599453,
+    "level": 0.6931471805599453,
+    "document": 0.6931471805599453,
+    "filtering": 0.6931471805599453,
+    "at": 0.6931471805599453,
+    "query": 0.6931471805599453,
+    "time": 0.6931471805599453,
+    "it": 0.6931471805599453,
+    "is": 0.6931471805599453,
+    "designed": 0.6931471805599453,
+    "easy": 0.6931471805599453,
+    "integration": 0.6931471805599453,
+    "into": 0.6931471805599453,
+    "other": 0.6931471805599453,
+    "apps": 0.6931471805599453,
+    "using": 0.6931471805599453,
+    "simple": 0.6931471805599453,
+    "api": 0.6931471805599453
+  },
+  "postings": {
+    "experience": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "i": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      },
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "have": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "built": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      },
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "production": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "grade": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "data": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "pipelines": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "and": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 2
+      },
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "analytics": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "services": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "my": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "work": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "focuses": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "on": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "reliability": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "maintainability": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "measurable": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "outcomes": [
+      {
+        "chunk_id": "experience-1",
+        "tf": 1
+      }
+    ],
+    "projects": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "a": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 2
+      }
+    ],
+    "retrieval": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "first": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "chatbot": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "service": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "for": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 2
+      }
+    ],
+    "portfolio": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "documents": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "the": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "system": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "supports": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "corpus": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "level": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 2
+      }
+    ],
+    "document": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "filtering": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "at": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "query": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "time": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "it": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "is": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "designed": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "easy": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "integration": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "into": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "other": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "apps": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "using": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "simple": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ],
+    "api": [
+      {
+        "chunk_id": "projects-1",
+        "tf": 1
+      }
+    ]
+  },
+  "chunks": {
+    "experience-1": {
+      "chunk_id": "experience-1",
+      "doc_id": "experience",
+      "title": "Experience",
+      "section": "general",
+      "source": "/portfolio/experience.md",
+      "text": "# Experience I have built production-grade data pipelines and analytics services. My work focuses on reliability, maintainability, and measurable outcomes."
+    },
+    "projects-1": {
+      "chunk_id": "projects-1",
+      "doc_id": "projects",
+      "title": "Projects",
+      "section": "general",
+      "source": "/portfolio/projects.md",
+      "text": "# Projects I built a retrieval-first chatbot service for portfolio documents. The system supports corpus-level and document-level filtering at query time. It is designed for easy integration into other apps using a simple API."
+    }
+  }
+}
