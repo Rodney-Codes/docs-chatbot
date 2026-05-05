@@ -1,3 +1,4 @@
-from docs_chatbot_service.api.app import create_app
+from docs_chatbot_service.api.app import app
 
-app = create_app()
+__all__ = ["app"]
+

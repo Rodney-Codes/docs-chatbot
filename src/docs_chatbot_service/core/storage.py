@@ -1,42 +1,57 @@
 from __future__ import annotations
 
 import json
+from dataclasses import dataclass
 from pathlib import Path
+from typing import List
+
+
+@dataclass(frozen=True)
+class CorpusStat:
+    corpus_id: str
+    total_chunks: int
+    total_docs: int
 
 
 class IndexStorage:
     def __init__(self, index_root: Path) -> None:
-        self.index_root = index_root
+        self._index_root = index_root
 
-    def corpus_index_path(self, corpus_id: str) -> Path:
-        return self.index_root / f"{corpus_id}.json"
+    def corpus_path(self, corpus_id: str) -> Path:
+        return self._index_root / corpus_id / "chunks.json"
 
-    def save_index(self, corpus_id: str, payload: dict) -> Path:
-        self.index_root.mkdir(parents=True, exist_ok=True)
-        output_path = self.corpus_index_path(corpus_id)
-        output_path.write_text(json.dumps(payload, ensure_ascii=True, indent=2), encoding="utf-8")
-        return output_path
+    def vector_index_path(self, corpus_id: str) -> Path:
+        return self._index_root / corpus_id / "vector_index.json"
 
-    def load_index(self, corpus_id: str) -> dict:
-        path = self.corpus_index_path(corpus_id)
+    def exists(self, corpus_id: str) -> bool:
+        return self.corpus_path(corpus_id).exists()
+
+    def load_chunks(self, corpus_id: str) -> List[dict]:
+        path = self.corpus_path(corpus_id)
         if not path.exists():
-            raise FileNotFoundError(f"Index for corpus '{corpus_id}' was not found at '{path}'.")
+            raise FileNotFoundError(f"Corpus not found: {corpus_id}")
         return json.loads(path.read_text(encoding="utf-8"))
 
-    def corpus_exists(self, corpus_id: str) -> bool:
-        return self.corpus_index_path(corpus_id).exists()
+    def vector_index_exists(self, corpus_id: str) -> bool:
+        return self.vector_index_path(corpus_id).exists()
 
-    def list_corpora(self) -> list[str]:
-        if not self.index_root.exists():
+    def list_corpora(self) -> List[CorpusStat]:
+        if not self._index_root.exists():
             return []
-        return sorted(path.stem for path in self.index_root.glob("*.json") if path.is_file())
 
-    def corpus_stats(self, corpus_id: str) -> dict:
-        payload = self.load_index(corpus_id=corpus_id)
-        chunks = payload.get("chunks", {})
-        doc_ids = {chunk.get("doc_id") for chunk in chunks.values() if isinstance(chunk, dict)}
-        return {
-            "corpus_id": corpus_id,
-            "total_chunks": int(payload.get("stats", {}).get("total_chunks", len(chunks))),
-            "total_docs": len({doc_id for doc_id in doc_ids if doc_id}),
-        }
+        stats: List[CorpusStat] = []
+        for corpus_dir in sorted([p for p in self._index_root.iterdir() if p.is_dir()]):
+            chunks_path = corpus_dir / "chunks.json"
+            if not chunks_path.exists():
+                continue
+            chunks = json.loads(chunks_path.read_text(encoding="utf-8"))
+            doc_ids = {chunk.get("doc_id", "") for chunk in chunks if chunk.get("doc_id")}
+            stats.append(
+                CorpusStat(
+                    corpus_id=corpus_dir.name,
+                    total_chunks=len(chunks),
+                    total_docs=len(doc_ids),
+                )
+            )
+        return stats
+

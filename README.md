@@ -1,64 +1,34 @@
-# Docs Chatbot Service (Phase 1)
+# Chatbot Service (Migration Workspace)
 
-Retrieval-first chatbot backend with zero cloud LLM calls.
+This folder is the migration workspace to run the chatbot as an independent service while still living in the same repository.
 
-For AI agents and automated integrations, read `AI_README.md` first.
+## Current approach
 
-This project provides a production-friendly service interface for integrating search-based chatbot responses into any app.
+- Runtime entrypoint lives in this folder (`app/main.py`).
+- Chatbot implementation is service-local at `services/chatbot/src/docs_chatbot_service`.
+- Service import resolution uses only `services/chatbot/src` for chatbot package loading.
 
-## Goals
+## Run locally
 
-- Zero ongoing AI token cost.
-- Grounded responses from your own documents.
-- Easy integration: send query + corpus + optional document filters.
+From repo root:
 
-## Project structure
-
-- `src/docs_chatbot_service/core`: indexing, storage, search, service logic.
-- `src/docs_chatbot_service/api`: FastAPI app and endpoints.
-- `scripts/build_index.py`: index build pipeline.
-- `docs/integration.md`: integration contract.
-- `tests/test_retrieval_service.py`: retrieval behavior tests.
-
-## Quickstart
-
-1. Create and activate a virtual environment.
-2. Install dependencies:
-   - `pip install -e .`
-   - For running tests: `pip install -e ".[dev]"`
-3. Build corpus end-to-end from raw docs:
-   - `python scripts/build_corpus.py --corpus-id default --raw-dir data/raw --source-prefix /portfolio`
-4. Run API:
-   - `uvicorn docs_chatbot_service.main:app --reload`
+- `python -m venv .venv` (if not already created)
+- `.\.venv\Scripts\python -m pip install -r services/chatbot/requirements.txt`
+- `.\.venv\Scripts\python -m uvicorn services.chatbot.app.main:app --host 0.0.0.0 --port 8000`
 
 ## API
 
+Primary endpoints:
+
 - `GET /health`
 - `POST /search`
+- `POST /chat`
 - `GET /corpora`
 - `GET /corpora/{corpus_id}`
 - `GET /corpora/{corpus_id}/exists`
 
-Example request:
+## Migration phases
 
-```json
-{
-  "query": "chatbot bm25",
-  "corpus_id": "default",
-  "doc_ids": ["projects"],
-  "top_k": 5
-}
-```
-
-`doc_ids` is optional and lets integrating apps choose which documents are reference-eligible for each query.
-
-## Data pipeline scripts
-
-- `scripts/ingest.py`: reads `data/raw` and generates normalized `docs.json`
-- `scripts/chunk.py`: splits normalized docs into retrieval chunks
-- `scripts/build_index.py`: builds BM25 index artifact for one corpus
-- `scripts/build_corpus.py`: orchestrates full build in one command
-
-## Tests
-
-- `python -m unittest discover -s tests -p "test_*.py"`
+1. **Phase 1 (completed):** standalone service wrapper + deployment scaffolding.
+2. **Phase 2 (completed):** moved `docs_chatbot_service` code into this folder and removed root `src` dependency.
+3. **Phase 3:** split this folder to its own repository without changing API contract.

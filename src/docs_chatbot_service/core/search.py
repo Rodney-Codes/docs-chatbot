@@ -1,65 +1,62 @@
 from __future__ import annotations
 
-from collections import defaultdict
+import math
+from collections import Counter, defaultdict
+from typing import Dict, List, Tuple
 
-from docs_chatbot_service.core.models import Chunk, SearchHit
-from docs_chatbot_service.core.text import tokenize
+from docs_chatbot_service.core.query_nlp import weighted_query_terms
+from docs_chatbot_service.core.text_util import tokenize
 
 
-class BM25Searcher:
-    def __init__(self, index_payload: dict) -> None:
-        self.index_payload = index_payload
-        self.idf = index_payload["idf"]
-        self.postings = index_payload["postings"]
-        self.chunk_lengths = index_payload["chunk_lengths"]
-        self.chunks = index_payload["chunks"]
-        self.avg_chunk_length = index_payload["stats"]["avg_chunk_length"] or 1.0
-        self.k1 = float(index_payload["bm25"]["k1"])
-        self.b = float(index_payload["bm25"]["b"])
+class BM25SearchEngine:
+    def __init__(self, chunks: List[dict]) -> None:
+        self._chunks = chunks
+        self._doc_tokens: Dict[str, Counter] = {}
+        self._doc_len: Dict[str, int] = {}
+        self._idf: Dict[str, float] = {}
+        self._inv_index: Dict[str, List[str]] = defaultdict(list)
+        self._avg_doc_len = 0.0
+        self._build()
 
-    def search(
-        self,
-        query: str,
-        top_k: int,
-        doc_ids: set[str] | None = None,
-        min_score: float = 0.0,
-    ) -> list[SearchHit]:
-        scores: dict[str, float] = defaultdict(float)
-        query_terms = tokenize(query)
+    def _build(self) -> None:
+        if not self._chunks:
+            self._avg_doc_len = 0.0
+            return
 
-        for term in query_terms:
-            if term not in self.postings:
+        for chunk in self._chunks:
+            chunk_id = chunk["chunk_id"]
+            token_counts = Counter(tokenize(chunk.get("text", "")))
+            self._doc_tokens[chunk_id] = token_counts
+            self._doc_len[chunk_id] = sum(token_counts.values())
+            for term in token_counts:
+                self._inv_index[term].append(chunk_id)
+
+        self._avg_doc_len = sum(self._doc_len.values()) / len(self._doc_len)
+        total_docs = len(self._doc_len)
+        for term, postings in self._inv_index.items():
+            df = len(postings)
+            self._idf[term] = math.log(1 + (total_docs - df + 0.5) / (df + 0.5))
+
+    def score(self, query: str, chunk: dict) -> float:
+        k1 = 1.5
+        b = 0.75
+        weighted_terms: List[Tuple[str, float]] = weighted_query_terms(query)
+        if not weighted_terms:
+            return 0.0
+
+        chunk_id = chunk["chunk_id"]
+        token_counts = self._doc_tokens.get(chunk_id, Counter())
+        doc_len = self._doc_len.get(chunk_id, 0)
+        if doc_len == 0:
+            return 0.0
+
+        denom_const = k1 * (1 - b + b * (doc_len / max(self._avg_doc_len, 1e-9)))
+        score = 0.0
+        for term, weight in weighted_terms:
+            tf = token_counts.get(term, 0)
+            if tf == 0:
                 continue
-            idf = float(self.idf.get(term, 0.0))
-            for posting in self.postings[term]:
-                chunk_id = posting["chunk_id"]
-                chunk = self.chunks[chunk_id]
-                if doc_ids is not None and chunk["doc_id"] not in doc_ids:
-                    continue
+            idf = self._idf.get(term, 0.0)
+            score += weight * (idf * ((tf * (k1 + 1)) / (tf + denom_const)))
+        return float(score)
 
-                tf = float(posting["tf"])
-                dl = float(self.chunk_lengths[chunk_id])
-                numerator = tf * (self.k1 + 1.0)
-                denominator = tf + self.k1 * (1.0 - self.b + self.b * (dl / self.avg_chunk_length))
-                scores[chunk_id] += idf * (numerator / denominator)
-
-        ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
-        hits: list[SearchHit] = []
-        for chunk_id, score in ranked[:top_k]:
-            if score < min_score:
-                continue
-            chunk_data = self.chunks[chunk_id]
-            hits.append(
-                SearchHit(
-                    chunk=Chunk(
-                        chunk_id=chunk_data["chunk_id"],
-                        doc_id=chunk_data["doc_id"],
-                        title=chunk_data["title"],
-                        section=chunk_data["section"],
-                        source=chunk_data["source"],
-                        text=chunk_data["text"],
-                    ),
-                    score=score,
-                )
-            )
-        return hits
