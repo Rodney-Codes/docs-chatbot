@@ -35,6 +35,18 @@ class IndexStorage:
     def vector_index_exists(self, corpus_id: str) -> bool:
         return self.vector_index_path(corpus_id).exists()
 
+    def save_chunks(self, corpus_id: str, chunks: List[dict]) -> Path:
+        path = self.corpus_path(corpus_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(chunks, ensure_ascii=True, indent=2), encoding="utf-8")
+        return path
+
+    def save_vector_index(self, corpus_id: str, payload: dict) -> Path:
+        path = self.vector_index_path(corpus_id)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps(payload, ensure_ascii=True), encoding="utf-8")
+        return path
+
     def list_corpora(self) -> List[CorpusStat]:
         if not self._index_root.exists():
             return []

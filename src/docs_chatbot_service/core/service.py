@@ -119,3 +119,7 @@ class RetrievalService:
         scored_results.sort(key=lambda item: item["score"], reverse=True)
         return scored_results[: params.top_k]
 
+    def invalidate_cache(self) -> None:
+        self._load_corpus.cache_clear()
+        self._rule_vector_index_for.cache_clear()
+

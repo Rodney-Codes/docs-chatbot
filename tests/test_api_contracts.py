@@ -100,6 +100,29 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(exists_response.status_code, 200)
         self.assertEqual(exists_response.json(), {"corpus_id": "portfolio-v1", "exists": True})
 
+    def test_corpora_load_from_url_contract(self) -> None:
+        chunks_file = Path(self.tmp.name) / "external_chunks.json"
+        vector_file = Path(self.tmp.name) / "external_vector.json"
+        chunks_file.write_text(json.dumps(SAMPLE_CHUNKS), encoding="utf-8")
+        vector_file.write_text(
+            json.dumps({"dim": 8, "idf": {"1": 1.0}, "vectors": {"projects-1": [0.1] * 8}}),
+            encoding="utf-8",
+        )
+        response = self.client.post(
+            "/corpora/load",
+            json={
+                "corpus_id": "loaded-v1",
+                "chunks_url": chunks_file.resolve().as_uri(),
+                "vector_index_url": vector_file.resolve().as_uri(),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["corpus_id"], "loaded-v1")
+        self.assertTrue(payload["chunks_loaded"])
+        self.assertTrue(payload["vector_loaded"])
+        self.assertTrue((self.index_root / "loaded-v1" / "chunks.json").exists())
+
     def test_chat_endpoint_contract(self) -> None:
         response = self.client.post(
             "/chat",
@@ -142,6 +165,24 @@ class ApiContractTests(unittest.TestCase):
             json={"query": "python", "corpus_id": "portfolio-v1", "retrieval_model": "neural_bert"},
         )
         self.assertEqual(response.status_code, 422)
+
+    def test_search_loads_artifacts_from_urls(self) -> None:
+        chunks_file = Path(self.tmp.name) / "search_load_chunks.json"
+        chunks_file.write_text(json.dumps(SAMPLE_CHUNKS), encoding="utf-8")
+        response = self.client.post(
+            "/search",
+            json={
+                "query": "python",
+                "corpus_id": "url-load-v1",
+                "top_k": 5,
+                "min_score": 0.0,
+                "chunks_url": chunks_file.resolve().as_uri(),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["corpus_id"], "url-load-v1")
+        self.assertGreaterEqual(payload["total_results"], 1)
 
     def test_chat_lightweight_nlp_method(self) -> None:
         response = self.client.post(
@@ -236,6 +277,22 @@ class ApiContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 422)
+
+    def test_chat_requires_chunks_url_when_vector_url_is_provided(self) -> None:
+        vector_file = Path(self.tmp.name) / "vector_only.json"
+        vector_file.write_text(
+            json.dumps({"dim": 8, "idf": {"1": 1.0}, "vectors": {"projects-1": [0.1] * 8}}),
+            encoding="utf-8",
+        )
+        response = self.client.post(
+            "/chat",
+            json={
+                "query": "python",
+                "corpus_id": "portfolio-v1",
+                "vector_index_url": vector_file.resolve().as_uri(),
+            },
+        )
+        self.assertEqual(response.status_code, 400)
 
 
 if __name__ == "__main__":

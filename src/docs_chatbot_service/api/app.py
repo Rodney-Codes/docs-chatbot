@@ -62,6 +62,14 @@ class SearchRequest(BaseModel):
             "(retrieval scoring pipeline)"
         ),
     )
+    chunks_url: Optional[str] = Field(
+        default=None,
+        description="Optional artifact URL for chunks.json. If provided, service loads this corpus before search.",
+    )
+    vector_index_url: Optional[str] = Field(
+        default=None,
+        description="Optional artifact URL for vector_index.json. Used with chunks_url or alone.",
+    )
 
 
 class SearchResult(BaseModel):
@@ -116,6 +124,14 @@ class ChatRequest(BaseModel):
             "bm25 | hashed_vector | bm25_hashed_vector | rule_lexicon_tfidf "
             "(retrieval scoring pipeline)"
         ),
+    )
+    chunks_url: Optional[str] = Field(
+        default=None,
+        description="Optional artifact URL for chunks.json. If provided, service loads this corpus before chat.",
+    )
+    vector_index_url: Optional[str] = Field(
+        default=None,
+        description="Optional artifact URL for vector_index.json. Used with chunks_url or alone.",
     )
 
 
@@ -196,6 +212,71 @@ class CorpusStatsResponse(BaseModel):
 class CorpusExistsResponse(BaseModel):
     corpus_id: str
     exists: bool
+
+
+class CorpusLoadRequest(BaseModel):
+    corpus_id: str = Field(default="default")
+    chunks_url: str = Field(..., min_length=8)
+    vector_index_url: Optional[str] = Field(default=None)
+
+
+class CorpusLoadResponse(BaseModel):
+    corpus_id: str
+    chunks_loaded: bool
+    vector_loaded: bool
+    chunks_path: str
+    vector_path: str
+
+
+def _fetch_json_from_url(url: str) -> object:
+    req = request.Request(url, headers={"User-Agent": "docs-chatbot-service/1.0"}, method="GET")
+    with request.urlopen(req, timeout=20) as resp:
+        return json.loads(resp.read().decode("utf-8"))
+
+
+def _load_corpus_artifacts(corpus_id: str, chunks_url: str, vector_index_url: Optional[str]) -> CorpusLoadResponse:
+    try:
+        chunks_payload = _fetch_json_from_url(chunks_url)
+    except (error.URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=f"Could not load chunks_url: {exc}") from exc
+    if not isinstance(chunks_payload, list):
+        raise HTTPException(status_code=400, detail="chunks_url must resolve to a JSON list.")
+
+    chunks_path = service._storage.save_chunks(corpus_id, chunks_payload)
+    vector_loaded = False
+    vector_path = ""
+    if vector_index_url:
+        try:
+            vector_payload = _fetch_json_from_url(vector_index_url)
+        except (error.URLError, TimeoutError, json.JSONDecodeError, ValueError) as exc:
+            raise HTTPException(status_code=400, detail=f"Could not load vector_index_url: {exc}") from exc
+        if not isinstance(vector_payload, dict):
+            raise HTTPException(status_code=400, detail="vector_index_url must resolve to a JSON object.")
+        vp = service._storage.save_vector_index(corpus_id, vector_payload)
+        vector_loaded = True
+        vector_path = str(vp)
+
+    service.invalidate_cache()
+    return CorpusLoadResponse(
+        corpus_id=corpus_id,
+        chunks_loaded=True,
+        vector_loaded=vector_loaded,
+        chunks_path=str(chunks_path),
+        vector_path=vector_path,
+    )
+
+
+def _maybe_load_corpus_from_request(
+    corpus_id: str, chunks_url: Optional[str], vector_index_url: Optional[str]
+) -> None:
+    if not chunks_url and not vector_index_url:
+        return
+    if not chunks_url:
+        raise HTTPException(
+            status_code=400,
+            detail="chunks_url is required when vector_index_url is provided.",
+        )
+    _load_corpus_artifacts(corpus_id, chunks_url, vector_index_url)
 
 
 def _extract_years_value(text: str) -> str:
@@ -370,8 +451,22 @@ def health() -> dict:
     return {"status": "ok"}
 
 
+@app.post("/corpora/load", response_model=CorpusLoadResponse)
+def load_corpus(request_body: CorpusLoadRequest) -> CorpusLoadResponse:
+    return _load_corpus_artifacts(
+        corpus_id=request_body.corpus_id,
+        chunks_url=request_body.chunks_url,
+        vector_index_url=request_body.vector_index_url,
+    )
+
+
 @app.post("/search", response_model=SearchResponse)
 def search(request: SearchRequest) -> SearchResponse:
+    _maybe_load_corpus_from_request(
+        corpus_id=request.corpus_id,
+        chunks_url=request.chunks_url,
+        vector_index_url=request.vector_index_url,
+    )
     if not service.corpus_exists(request.corpus_id):
         raise HTTPException(status_code=404, detail=f"Corpus not found: {request.corpus_id}")
 
@@ -397,6 +492,11 @@ def search(request: SearchRequest) -> SearchResponse:
 
 @app.post("/chat", response_model=ChatResponse)
 def chat(request_body: ChatRequest) -> ChatResponse:
+    _maybe_load_corpus_from_request(
+        corpus_id=request_body.corpus_id,
+        chunks_url=request_body.chunks_url,
+        vector_index_url=request_body.vector_index_url,
+    )
     allow_fallback = _resolve_allow_fallback(request_body)
     method_requested = (
         request_body.answer_method or ChatAnswerMethod.hugging_face_lightweight_nlp
