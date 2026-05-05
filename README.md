@@ -2,6 +2,8 @@
 
 Standalone chatbot backend with composable retrieval and answer pipelines.
 
+For AI agents and automation context, read `AI_README.md` first.
+
 ## Features
 
 - Search and chat APIs over indexed document corpora.
@@ -35,11 +37,16 @@ Standalone chatbot backend with composable retrieval and answer pipelines.
 ## API endpoints
 
 - `GET /health`
+- `POST /corpora/load`
 - `POST /search`
 - `POST /chat`
 - `GET /corpora`
 - `GET /corpora/{corpus_id}`
 - `GET /corpora/{corpus_id}/exists`
+
+`/corpora/load` can load `chunks.json` and optional `vector_index.json` by URL,
+so app-specific artifacts can stay in application repos while this service repo
+remains generic.
 
 ## Test
 
