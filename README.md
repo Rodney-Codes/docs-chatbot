@@ -1,24 +1,38 @@
-# Chatbot Service (Migration Workspace)
+# Docs Chatbot Service
 
-This folder is the migration workspace to run the chatbot as an independent service while still living in the same repository.
+Standalone chatbot backend with composable retrieval and answer pipelines.
 
-## Current approach
+## Features
 
-- Runtime entrypoint lives in this folder (`app/main.py`).
-- Chatbot implementation is service-local at `services/chatbot/src/docs_chatbot_service`.
-- Service import resolution uses only `services/chatbot/src` for chatbot package loading.
+- Search and chat APIs over indexed document corpora.
+- Composable retrieval models:
+  - `bm25`
+  - `hashed_vector`
+  - `bm25_hashed_vector`
+  - `rule_lexicon_tfidf`
+- Composable answer methods:
+  - `hugging_face`
+  - `lightweight_nlp`
+  - `hugging_face_lightweight_nlp`
 
-## Run locally
+## Repository layout
 
-From repo root:
+- `app/main.py`: ASGI entrypoint.
+- `src/docs_chatbot_service/`: core service and API modules.
+- `tests/`: API contract and NLP unit tests.
+- `.env.example`: runtime env template.
 
-- `python -m venv .venv` (if not already created)
-- `.\.venv\Scripts\python -m pip install -r services/chatbot/requirements.txt`
-- `.\.venv\Scripts\python -m uvicorn services.chatbot.app.main:app --host 0.0.0.0 --port 8000`
+## Local run
 
-## API
+1. Create and activate venv.
+2. Install dependencies:
+   - `pip install -r requirements.txt`
+3. Copy env file:
+   - `.env.example` -> `.env`
+4. Run:
+   - `uvicorn app.main:app --host 0.0.0.0 --port 8000`
 
-Primary endpoints:
+## API endpoints
 
 - `GET /health`
 - `POST /search`
@@ -27,8 +41,12 @@ Primary endpoints:
 - `GET /corpora/{corpus_id}`
 - `GET /corpora/{corpus_id}/exists`
 
-## Migration phases
+## Test
 
-1. **Phase 1 (completed):** standalone service wrapper + deployment scaffolding.
-2. **Phase 2 (completed):** moved `docs_chatbot_service` code into this folder and removed root `src` dependency.
-3. **Phase 3:** split this folder to its own repository without changing API contract.
+- `python -m unittest tests.test_api_contracts tests.test_query_nlp -v`
+
+## Deployment notes
+
+- Set `CHATBOT_INDEX_ROOT` to persisted storage path (default `data/index`).
+- Set `HF_API_TOKEN` if using `hugging_face*` answer methods.
+- Configure `CORS_ALLOW_ORIGINS` for client apps.
