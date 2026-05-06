@@ -18,6 +18,7 @@ from docs_chatbot_service.core.chat_log_store import (
     ChatEventRecord,
     ChatFeedbackRecord,
     ChatLogStore,
+    get_store_diagnostics,
     get_store,
 )
 from docs_chatbot_service.core.query_nlp import (
@@ -194,6 +195,14 @@ class ChatFeedbackResponse(BaseModel):
     accepted: bool
     rating: int
     bucket: str
+
+
+class LoggingHealthResponse(BaseModel):
+    enabled: bool
+    db_url_present: bool
+    store_ready: bool
+    store_kind: str
+    last_init_error: str
 
 
 NO_ANSWER_MESSAGE = (
@@ -552,6 +561,12 @@ def _generate_with_hf(query: str, results: List[dict]) -> str:
 @app.get("/health")
 def health() -> dict:
     return {"status": "ok"}
+
+
+@app.get("/health/logging", response_model=LoggingHealthResponse)
+def logging_health() -> LoggingHealthResponse:
+    diagnostics = get_store_diagnostics()
+    return LoggingHealthResponse(**diagnostics)
 
 
 @app.post("/corpora/load", response_model=CorpusLoadResponse)

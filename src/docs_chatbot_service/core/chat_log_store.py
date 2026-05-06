@@ -339,6 +339,7 @@ class InMemoryChatLogStore:
 
 _GLOBAL_STORE: Optional[ChatLogStoreProtocol] = None
 _GLOBAL_STORE_LOCK = threading.Lock()
+_LAST_INIT_ERROR: str = ""
 
 
 def _resolve_db_url() -> str:
@@ -346,6 +347,25 @@ def _resolve_db_url() -> str:
     if raw:
         return raw
     return ""
+
+
+def _set_last_init_error(message: str) -> None:
+    global _LAST_INIT_ERROR
+    _LAST_INIT_ERROR = (message or "").strip()[:500]
+
+
+def get_store_diagnostics() -> Dict[str, Any]:
+    raw = os.getenv("CHAT_LOG_ENABLED", "true").strip().lower()
+    enabled = raw not in {"0", "false", "no", "off"}
+    db_url = _resolve_db_url()
+    store = _GLOBAL_STORE
+    return {
+        "enabled": enabled,
+        "db_url_present": bool(db_url),
+        "store_ready": store is not None,
+        "store_kind": type(store).__name__ if store is not None else "none",
+        "last_init_error": _LAST_INIT_ERROR,
+    }
 
 
 def get_store() -> Optional[ChatLogStoreProtocol]:
@@ -360,17 +380,21 @@ def get_store() -> Optional[ChatLogStoreProtocol]:
         return _GLOBAL_STORE
     raw = os.getenv("CHAT_LOG_ENABLED", "true").strip().lower()
     if raw in {"0", "false", "no", "off"}:
+        _set_last_init_error("")
         return None
     db_url = _resolve_db_url()
     if not db_url:
         LOGGER.warning("CHAT_LOG_ENABLED=true but SUPABASE_DB_URL is missing; logging disabled.")
+        _set_last_init_error("SUPABASE_DB_URL is missing")
         return None
     with _GLOBAL_STORE_LOCK:
         if _GLOBAL_STORE is None:
             try:
                 _GLOBAL_STORE = ChatLogStore(db_url=db_url)
+                _set_last_init_error("")
             except Exception:
                 LOGGER.exception("Failed to initialize chat log store")
+                _set_last_init_error("Failed to initialize chat log store")
                 return None
     return _GLOBAL_STORE
 
@@ -381,4 +405,5 @@ def reset_store_for_tests() -> ChatLogStoreProtocol:
     global _GLOBAL_STORE
     with _GLOBAL_STORE_LOCK:
         _GLOBAL_STORE = InMemoryChatLogStore()
+        _set_last_init_error("")
         return _GLOBAL_STORE

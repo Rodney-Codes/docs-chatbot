@@ -171,6 +171,18 @@ class ApiContractTests(unittest.TestCase):
         self.assertEqual(payload["rating"], 1)
         self.assertEqual(payload["bucket"], "positive")
 
+    def test_logging_health_contract(self) -> None:
+        response = self.client.get("/health/logging")
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(
+            set(payload.keys()),
+            {"enabled", "db_url_present", "store_ready", "store_kind", "last_init_error"},
+        )
+        self.assertIsInstance(payload["enabled"], bool)
+        self.assertIsInstance(payload["db_url_present"], bool)
+        self.assertIsInstance(payload["store_ready"], bool)
+
     def test_search_rule_lexicon_tfidf_model(self) -> None:
         response = self.client.post(
             "/search",
