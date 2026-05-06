@@ -332,6 +332,22 @@ def _maybe_load_corpus_from_request(
     _load_corpus_artifacts(corpus_id, chunks_url, vector_index_url)
 
 
+def _maybe_autoload_default_corpus(corpus_id: str) -> None:
+    if corpus_id != "default":
+        return
+    if service.corpus_exists(corpus_id):
+        return
+    chunks_url = os.getenv("CHATBOT_CHUNKS_URL", "").strip()
+    vector_index_url = os.getenv("CHATBOT_VECTOR_INDEX_URL", "").strip() or None
+    if not chunks_url:
+        return
+    try:
+        _load_corpus_artifacts(corpus_id, chunks_url, vector_index_url)
+        LOGGER.info("Auto-loaded default corpus from configured artifact URLs.")
+    except Exception:  # pragma: no cover
+        LOGGER.exception("Failed to auto-load default corpus from CHATBOT_* URLs")
+
+
 def _resolve_session_id(supplied: Optional[str]) -> str:
     candidate = (supplied or "").strip()
     if candidate:
@@ -587,6 +603,7 @@ def search(request: SearchRequest) -> SearchResponse:
         chunks_url=request.chunks_url,
         vector_index_url=request.vector_index_url,
     )
+    _maybe_autoload_default_corpus(request.corpus_id)
     if not service.corpus_exists(request.corpus_id):
         raise HTTPException(status_code=404, detail=f"Corpus not found: {request.corpus_id}")
 
@@ -617,6 +634,7 @@ def chat(request_body: ChatRequest) -> ChatResponse:
         chunks_url=request_body.chunks_url,
         vector_index_url=request_body.vector_index_url,
     )
+    _maybe_autoload_default_corpus(request_body.corpus_id)
     allow_fallback = _resolve_allow_fallback(request_body)
     method_requested = (
         request_body.answer_method or ChatAnswerMethod.hugging_face_lightweight_nlp

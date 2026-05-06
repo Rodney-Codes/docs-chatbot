@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -341,6 +342,24 @@ class ApiContractTests(unittest.TestCase):
             },
         )
         self.assertEqual(response.status_code, 400)
+
+    def test_chat_autoloads_default_corpus_from_env_urls(self) -> None:
+        chunks_file = Path(self.tmp.name) / "autoload_chunks.json"
+        chunks_file.write_text(json.dumps(SAMPLE_CHUNKS), encoding="utf-8")
+        previous = os.environ.get("CHATBOT_CHUNKS_URL")
+        os.environ["CHATBOT_CHUNKS_URL"] = chunks_file.resolve().as_uri()
+        try:
+            app_module.service = app_module.RetrievalService(index_root=self.index_root)
+            response = self.client.post(
+                "/chat",
+                json={"query": "python", "corpus_id": "default", "answer_method": "lightweight_nlp"},
+            )
+        finally:
+            if previous is None:
+                os.environ.pop("CHATBOT_CHUNKS_URL", None)
+            else:
+                os.environ["CHATBOT_CHUNKS_URL"] = previous
+        self.assertEqual(response.status_code, 200)
 
 
 if __name__ == "__main__":
