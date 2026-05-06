@@ -200,6 +200,8 @@ class ChatFeedbackResponse(BaseModel):
 class LoggingHealthResponse(BaseModel):
     enabled: bool
     db_url_present: bool
+    project_url_present: bool
+    service_role_key_present: bool
     store_ready: bool
     store_kind: str
     last_init_error: str

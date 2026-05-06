@@ -15,6 +15,7 @@ import uuid
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional, Protocol
+from urllib import error, parse, request
 
 import psycopg
 from psycopg.rows import dict_row
@@ -337,6 +338,132 @@ class InMemoryChatLogStore:
         return list(reversed(self._feedback[-max(1, min(limit, 1000)) :]))
 
 
+class SupabaseRestChatLogStore:
+    """REST-backed store used when direct Postgres connectivity is unavailable."""
+
+    def __init__(self, project_url: str, service_role_key: str) -> None:
+        self._base_url = project_url.rstrip("/")
+        self._service_role_key = service_role_key.strip()
+        if not self._base_url.startswith("https://"):
+            raise ValueError("SUPABASE_PROJECT_URL must start with https://")
+        if not self._service_role_key:
+            raise ValueError("SUPABASE_SERVICE_ROLE_KEY is required for REST fallback")
+
+    def _headers(self, prefer: Optional[str] = None) -> Dict[str, str]:
+        headers = {
+            "Content-Type": "application/json",
+            "apikey": self._service_role_key,
+            "Authorization": f"Bearer {self._service_role_key}",
+        }
+        if prefer:
+            headers["Prefer"] = prefer
+        return headers
+
+    def _request_json(
+        self,
+        method: str,
+        path: str,
+        *,
+        payload: Optional[object] = None,
+        prefer: Optional[str] = None,
+    ) -> object:
+        data = None
+        if payload is not None:
+            data = json.dumps(payload).encode("utf-8")
+        req = request.Request(
+            url=f"{self._base_url}{path}",
+            data=data,
+            headers=self._headers(prefer=prefer),
+            method=method,
+        )
+        with request.urlopen(req, timeout=15) as resp:
+            body = resp.read().decode("utf-8").strip()
+            if not body:
+                return []
+            return json.loads(body)
+
+    @staticmethod
+    def _event_payload(record: ChatEventRecord) -> Dict[str, Any]:
+        now = _utc_now_iso()
+        return {
+            "event_id": record.event_id,
+            "session_id": record.session_id,
+            "corpus_id": record.corpus_id,
+            "category": record.category,
+            "bucket": record.bucket,
+            "query": record.query,
+            "answer": record.answer,
+            "source": record.source,
+            "method": record.method,
+            "retrieval_model": record.retrieval_model,
+            "used_hf": bool(record.used_hf),
+            "top_k": int(record.top_k),
+            "min_score": float(record.min_score),
+            "allow_fallback": bool(record.allow_fallback),
+            "latency_ms": int(record.latency_ms),
+            "info": record.info,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    @staticmethod
+    def _feedback_payload(record: ChatFeedbackRecord) -> Dict[str, Any]:
+        now = _utc_now_iso()
+        return {
+            "event_id": record.event_id,
+            "session_id": record.session_id,
+            "category": record.category,
+            "bucket": record.bucket,
+            "rating": int(record.rating),
+            "comment": record.comment,
+            "info": record.info,
+            "created_at": now,
+            "updated_at": now,
+        }
+
+    def insert_event(self, record: ChatEventRecord) -> None:
+        self._request_json(
+            "POST",
+            "/rest/v1/chat_events",
+            payload=self._event_payload(record),
+            prefer="return=minimal",
+        )
+
+    def insert_feedback(self, record: ChatFeedbackRecord) -> None:
+        self._request_json(
+            "POST",
+            "/rest/v1/chat_feedback",
+            payload=self._feedback_payload(record),
+            prefer="return=minimal",
+        )
+
+    def event_exists(self, event_id: str) -> bool:
+        if not event_id:
+            return False
+        encoded = parse.quote(event_id, safe="")
+        result = self._request_json(
+            "GET",
+            f"/rest/v1/chat_events?select=event_id&event_id=eq.{encoded}&limit=1",
+        )
+        return bool(result)
+
+    def fetch_recent_events(self, limit: int = 50) -> List[dict]:
+        bounded = max(1, min(limit, 1000))
+        result = self._request_json(
+            "GET",
+            f"/rest/v1/chat_events?select=*&order=id.desc&limit={bounded}",
+        )
+        return [dict(item) for item in (result or []) if isinstance(item, dict)]
+
+    def fetch_recent_feedback(self, limit: int = 50) -> List[dict]:
+        bounded = max(1, min(limit, 1000))
+        result = self._request_json(
+            "GET",
+            f"/rest/v1/chat_feedback?select=*&order=id.desc&limit={bounded}",
+        )
+        return [dict(item) for item in (result or []) if isinstance(item, dict)]
+
+
 _GLOBAL_STORE: Optional[ChatLogStoreProtocol] = None
 _GLOBAL_STORE_LOCK = threading.Lock()
 _LAST_INIT_ERROR: str = ""
@@ -349,6 +476,21 @@ def _resolve_db_url() -> str:
     return ""
 
 
+def _resolve_project_url() -> str:
+    return os.getenv("SUPABASE_PROJECT_URL", "").strip()
+
+
+def _resolve_service_role_key() -> str:
+    return os.getenv("SUPABASE_SERVICE_ROLE_KEY", "").strip()
+
+
+def _env_bool(name: str, default: bool) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() not in {"0", "false", "no", "off"}
+
+
 def _set_last_init_error(message: str) -> None:
     global _LAST_INIT_ERROR
     _LAST_INIT_ERROR = (message or "").strip()[:500]
@@ -358,10 +500,14 @@ def get_store_diagnostics() -> Dict[str, Any]:
     raw = os.getenv("CHAT_LOG_ENABLED", "true").strip().lower()
     enabled = raw not in {"0", "false", "no", "off"}
     db_url = _resolve_db_url()
+    project_url = _resolve_project_url()
+    service_role_key = _resolve_service_role_key()
     store = _GLOBAL_STORE
     return {
         "enabled": enabled,
         "db_url_present": bool(db_url),
+        "project_url_present": bool(project_url),
+        "service_role_key_present": bool(service_role_key),
         "store_ready": store is not None,
         "store_kind": type(store).__name__ if store is not None else "none",
         "last_init_error": _LAST_INIT_ERROR,
@@ -383,16 +529,45 @@ def get_store() -> Optional[ChatLogStoreProtocol]:
         _set_last_init_error("")
         return None
     db_url = _resolve_db_url()
-    if not db_url:
-        LOGGER.warning("CHAT_LOG_ENABLED=true but SUPABASE_DB_URL is missing; logging disabled.")
-        _set_last_init_error("SUPABASE_DB_URL is missing")
+    project_url = _resolve_project_url()
+    service_role_key = _resolve_service_role_key()
+    allow_rest_fallback = _env_bool("CHAT_LOG_ALLOW_REST_FALLBACK", True)
+    if not db_url and not (allow_rest_fallback and project_url and service_role_key):
+        LOGGER.warning(
+            "CHAT_LOG_ENABLED=true but no usable store credentials were found; logging disabled."
+        )
+        _set_last_init_error("No usable store credentials found")
         return None
     with _GLOBAL_STORE_LOCK:
         if _GLOBAL_STORE is None:
             try:
-                _GLOBAL_STORE = ChatLogStore(db_url=db_url)
+                if db_url:
+                    _GLOBAL_STORE = ChatLogStore(db_url=db_url)
+                else:
+                    _GLOBAL_STORE = SupabaseRestChatLogStore(
+                        project_url=project_url,
+                        service_role_key=service_role_key,
+                    )
                 _set_last_init_error("")
-            except Exception:
+            except Exception as primary_exc:
+                if allow_rest_fallback and project_url and service_role_key:
+                    try:
+                        _GLOBAL_STORE = SupabaseRestChatLogStore(
+                            project_url=project_url,
+                            service_role_key=service_role_key,
+                        )
+                        _set_last_init_error(
+                            f"Fell back to REST store after Postgres init failure: {type(primary_exc).__name__}"
+                        )
+                        LOGGER.warning(
+                            "Falling back to Supabase REST chat log store after Postgres init failure: %s",
+                            type(primary_exc).__name__,
+                        )
+                        return _GLOBAL_STORE
+                    except Exception:
+                        LOGGER.exception("Failed to initialize Supabase REST chat log store")
+                        _set_last_init_error("Failed to initialize both Postgres and REST chat log stores")
+                        return None
                 LOGGER.exception("Failed to initialize chat log store")
                 _set_last_init_error("Failed to initialize chat log store")
                 return None

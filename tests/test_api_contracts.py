@@ -177,7 +177,15 @@ class ApiContractTests(unittest.TestCase):
         payload = response.json()
         self.assertEqual(
             set(payload.keys()),
-            {"enabled", "db_url_present", "store_ready", "store_kind", "last_init_error"},
+            {
+                "enabled",
+                "db_url_present",
+                "project_url_present",
+                "service_role_key_present",
+                "store_ready",
+                "store_kind",
+                "last_init_error",
+            },
         )
         self.assertIsInstance(payload["enabled"], bool)
         self.assertIsInstance(payload["db_url_present"], bool)
