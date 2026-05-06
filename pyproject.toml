@@ -9,6 +9,7 @@ description = "Standalone retrieval-first docs chatbot backend"
 requires-python = ">=3.10"
 dependencies = [
   "fastapi>=0.115.0",
+  "psycopg[binary]>=3.2.1",
   "python-dotenv>=1.0.1",
   "uvicorn>=0.30.0",
 ]

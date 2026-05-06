@@ -14,6 +14,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from docs_chatbot_service.api import app as app_module
+from docs_chatbot_service.core import chat_log_store as cls_module
 
 
 SAMPLE_CHUNKS = [
@@ -43,6 +44,7 @@ class ApiContractTests(unittest.TestCase):
         corpus_dir = self.index_root / "portfolio-v1"
         corpus_dir.mkdir(parents=True, exist_ok=True)
         (corpus_dir / "chunks.json").write_text(json.dumps(SAMPLE_CHUNKS), encoding="utf-8")
+        cls_module.reset_store_for_tests()
         app_module.service = app_module.RetrievalService(index_root=self.index_root)
         self.client = TestClient(app_module.app)
 
@@ -142,6 +144,32 @@ class ApiContractTests(unittest.TestCase):
         self.assertIn("used_hf", payload)
         self.assertIn("method", payload)
         self.assertEqual(payload["retrieval_model"], "bm25_hashed_vector")
+        self.assertTrue(payload["event_id"])
+        self.assertTrue(payload["session_id"])
+
+    def test_chat_feedback_contract(self) -> None:
+        chat_response = self.client.post(
+            "/chat",
+            json={
+                "query": "chatbot projects",
+                "corpus_id": "portfolio-v1",
+                "top_k": 3,
+                "min_score": 0.0,
+            },
+        )
+        self.assertEqual(chat_response.status_code, 200)
+        event_id = chat_response.json()["event_id"]
+
+        feedback_response = self.client.post(
+            "/chat/feedback",
+            json={"event_id": event_id, "rating": 1, "comment": "useful answer"},
+        )
+        self.assertEqual(feedback_response.status_code, 200)
+        payload = feedback_response.json()
+        self.assertEqual(payload["event_id"], event_id)
+        self.assertTrue(payload["accepted"])
+        self.assertEqual(payload["rating"], 1)
+        self.assertEqual(payload["bucket"], "positive")
 
     def test_search_rule_lexicon_tfidf_model(self) -> None:
         response = self.client.post(
