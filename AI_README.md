@@ -7,6 +7,7 @@ This file is the source-of-truth context for AI agents working in this repositor
 - Standalone chatbot backend extracted from `personal-info`.
 - Serves grounded answers over indexed corpus artifacts.
 - Supports composable retrieval and answer methods.
+- **No production host** is active (Render retired). Run locally until deployment is re-enabled.
 
 ## 2) Runtime architecture
 

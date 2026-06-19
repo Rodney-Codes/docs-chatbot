@@ -180,17 +180,13 @@ class ApiContractTests(unittest.TestCase):
             set(payload.keys()),
             {
                 "enabled",
-                "db_url_present",
-                "project_url_present",
-                "service_role_key_present",
                 "store_ready",
                 "store_kind",
-                "last_init_error",
             },
         )
         self.assertIsInstance(payload["enabled"], bool)
-        self.assertIsInstance(payload["db_url_present"], bool)
         self.assertIsInstance(payload["store_ready"], bool)
+        self.assertIsInstance(payload["store_kind"], str)
 
     def test_search_rule_lexicon_tfidf_model(self) -> None:
         response = self.client.post(

@@ -17,9 +17,9 @@ from pydantic import BaseModel, Field
 from docs_chatbot_service.core.chat_log_store import (
     ChatEventRecord,
     ChatFeedbackRecord,
-    ChatLogStore,
     get_store_diagnostics,
     get_store,
+    new_event_id,
 )
 from docs_chatbot_service.core.query_nlp import (
     analyze_query,
@@ -199,12 +199,8 @@ class ChatFeedbackResponse(BaseModel):
 
 class LoggingHealthResponse(BaseModel):
     enabled: bool
-    db_url_present: bool
-    project_url_present: bool
-    service_role_key_present: bool
     store_ready: bool
     store_kind: str
-    last_init_error: str
 
 
 NO_ANSWER_MESSAGE = (
@@ -352,7 +348,7 @@ def _resolve_session_id(supplied: Optional[str]) -> str:
     candidate = (supplied or "").strip()
     if candidate:
         return candidate[:128]
-    return f"anon-{ChatLogStore.new_event_id()}"
+    return f"anon-{new_event_id()}"
 
 
 def _bucket_for_method(method: str, results_count: int) -> str:
@@ -644,7 +640,7 @@ def chat(request_body: ChatRequest) -> ChatResponse:
         raise HTTPException(
             status_code=404, detail=f"Corpus not found: {request_body.corpus_id}"
         )
-    event_id = ChatLogStore.new_event_id()
+    event_id = new_event_id()
     session_id = _resolve_session_id(request_body.session_id)
     started = time.perf_counter()
     results = service.search(

@@ -54,6 +54,11 @@ remains generic.
 
 ## Deployment notes
 
+**Production:** no hosted service is configured. The previous Render deployment is retired; use **local run** below until a new host is chosen.
+
+When deploying again (any provider):
+
 - Set `CHATBOT_INDEX_ROOT` to persisted storage path (default `data/index`).
 - Set `HF_API_TOKEN` if using `hugging_face*` answer methods.
 - Configure `CORS_ALLOW_ORIGINS` for client apps.
+- Optional in-memory chat logging: set `CHAT_LOG_ENABLED=true` (no external database).
