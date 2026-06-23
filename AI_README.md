@@ -2,6 +2,8 @@
 
 **Source of truth for AI agents.** Read this file first before changing code, debugging, or integrating this service into another application.
 
+**Public URL (no clone required):** https://raw.githubusercontent.com/Rodney-Codes/docs-chatbot/main/AI_README.md
+
 ---
 
 ## 1) What this repo is

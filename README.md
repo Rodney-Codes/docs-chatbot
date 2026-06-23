@@ -4,6 +4,11 @@ Standalone, zero-cost document chatbot backend for any application. Apps supply 
 
 For AI agents and automation context, read `AI_README.md` first.
 
+**Public agent context (fetch without cloning):**
+
+- https://raw.githubusercontent.com/Rodney-Codes/docs-chatbot/main/AI_README.md
+- https://cdn.jsdelivr.net/gh/Rodney-Codes/docs-chatbot@main/AI_README.md
+
 ## Features
 
 - Search and chat APIs over indexed document corpora.
