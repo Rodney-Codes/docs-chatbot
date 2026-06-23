@@ -21,19 +21,22 @@ from docs_chatbot_service.core.chat_log_store import (
     get_store,
     new_event_id,
 )
+from docs_chatbot_service.core.ingest import (
+    documents_root_has_sources,
+    ingest_into_storage,
+)
 from docs_chatbot_service.core.query_nlp import (
     analyze_query,
     detect_intent_from_signals,
-    detect_skill_entity,
     extract_best_sentences,
 )
 from docs_chatbot_service.core.service import RetrievalModel, RetrievalService, SearchParams
-from docs_chatbot_service.core.text_util import tokenize
 
 LOGGER = logging.getLogger(__name__)
 
 load_dotenv()
 
+SERVICE_ROOT = Path(__file__).resolve().parents[3]
 INDEX_ROOT = Path("data/index")
 app = FastAPI(title="Docs Chatbot Service")
 service = RetrievalService(index_root=INDEX_ROOT)
@@ -204,7 +207,7 @@ class LoggingHealthResponse(BaseModel):
 
 
 NO_ANSWER_MESSAGE = (
-    "I'm unable to answer this query, please contact Rohit to get an answer for this query"
+    "I could not find a grounded answer in the loaded documents for this query."
 )
 
 
@@ -218,6 +221,27 @@ def _resolve_retrieval_model(
     explicit: Optional[RetrievalModel],
 ) -> RetrievalModel:
     return explicit or RetrievalModel.bm25_hashed_vector
+
+
+def _resolve_documents_root() -> Path:
+    documents_root = Path(os.getenv("CHATBOT_DOCUMENTS_ROOT", "documents"))
+    if not documents_root.is_absolute():
+        documents_root = (SERVICE_ROOT / documents_root).resolve()
+    return documents_root
+
+
+def _resolve_default_corpus_id() -> str:
+    return os.getenv("CHATBOT_DEFAULT_CORPUS_ID", "default").strip() or "default"
+
+
+def _hf_answer_enabled() -> bool:
+    if not _env_bool("HF_API_ENABLED", False):
+        return False
+    return bool(os.getenv("HF_API_TOKEN", "").strip())
+
+
+def _resolve_answer_method(explicit: Optional[ChatAnswerMethod]) -> ChatAnswerMethod:
+    return explicit or ChatAnswerMethod.lightweight_nlp
 
 
 def _chat_answer_from_results(
@@ -239,14 +263,26 @@ def _chat_answer_from_results(
         return _build_fallback_answer(query, results), source, False, "lightweight_nlp"
 
     if answer_method == ChatAnswerMethod.hugging_face:
+        if not _hf_answer_enabled():
+            if not allow_fallback:
+                return NO_ANSWER_MESSAGE, source, False, "none"
+            return _build_fallback_answer(query, results), source, False, "lightweight_nlp"
         hf_answer = _generate_with_hf(query, results)
         if hf_answer:
             return hf_answer, source, True, "hugging_face"
-        return "", source, False, "none"
+        if not allow_fallback:
+            return NO_ANSWER_MESSAGE, source, False, "none"
+        return _build_fallback_answer(query, results), source, False, "lightweight_nlp"
 
-    hf_answer = _generate_with_hf(query, results)
-    if hf_answer:
-        return hf_answer, source, True, "hugging_face"
+    if answer_method == ChatAnswerMethod.hugging_face_lightweight_nlp:
+        if _hf_answer_enabled():
+            hf_answer = _generate_with_hf(query, results)
+            if hf_answer:
+                return hf_answer, source, True, "hugging_face"
+        if not allow_fallback:
+            return NO_ANSWER_MESSAGE, source, False, "none"
+        return _build_fallback_answer(query, results), source, False, "lightweight_nlp"
+
     if not allow_fallback:
         return NO_ANSWER_MESSAGE, source, False, "none"
     return _build_fallback_answer(query, results), source, False, "lightweight_nlp"
@@ -275,6 +311,94 @@ class CorpusLoadResponse(BaseModel):
     vector_loaded: bool
     chunks_path: str
     vector_path: str
+
+
+class CorpusIngestRequest(BaseModel):
+    corpus_id: str = Field(default="default")
+    documents_root: Optional[str] = Field(
+        default=None,
+        description="Optional override for the source documents directory.",
+    )
+    build_vector_index: bool = Field(default=True)
+
+
+class CorpusIngestResponse(BaseModel):
+    corpus_id: str
+    documents_found: int
+    chunks_written: int
+    vector_index_built: bool
+    chunks_path: str
+    vector_path: str
+
+
+def _ingest_from_documents_root(
+    corpus_id: str,
+    documents_root: Path,
+    *,
+    build_vector_index: bool = True,
+) -> CorpusIngestResponse:
+    try:
+        result = ingest_into_storage(
+            documents_root=documents_root,
+            corpus_id=corpus_id,
+            storage=service._storage,
+            build_vector_index=build_vector_index,
+        )
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    service.invalidate_cache()
+    return CorpusIngestResponse(
+        corpus_id=result.corpus_id,
+        documents_found=result.documents_found,
+        chunks_written=result.chunks_written,
+        vector_index_built=result.vector_index_built,
+        chunks_path=result.chunks_path,
+        vector_path=result.vector_path,
+    )
+
+
+def _maybe_ingest_default_documents(corpus_id: str) -> None:
+    if corpus_id != _resolve_default_corpus_id():
+        return
+    documents_root = _resolve_documents_root()
+    if not documents_root_has_sources(documents_root):
+        return
+    try:
+        ingest_into_storage(
+            documents_root=documents_root,
+            corpus_id=corpus_id,
+            storage=service._storage,
+            build_vector_index=True,
+        )
+        service.invalidate_cache()
+        LOGGER.info("Loaded corpus %s from documents at %s", corpus_id, documents_root)
+    except FileNotFoundError:
+        LOGGER.warning("No ingestible documents found under %s", documents_root)
+
+
+def ingest_documents_on_startup() -> None:
+    if not _env_bool("CHATBOT_AUTO_INGEST", True):
+        return
+    corpus_id = _resolve_default_corpus_id()
+    documents_root = _resolve_documents_root()
+    if not documents_root_has_sources(documents_root):
+        return
+    try:
+        result = ingest_into_storage(
+            documents_root=documents_root,
+            corpus_id=corpus_id,
+            storage=service._storage,
+            build_vector_index=True,
+        )
+        service.invalidate_cache()
+        LOGGER.info(
+            "Startup ingest for corpus %s: %s documents, %s chunks",
+            corpus_id,
+            result.documents_found,
+            result.chunks_written,
+        )
+    except FileNotFoundError:
+        LOGGER.warning("CHATBOT_AUTO_INGEST is enabled but no documents were found under %s", documents_root)
 
 
 def _fetch_json_from_url(url: str) -> object:
@@ -329,8 +453,10 @@ def _maybe_load_corpus_from_request(
 
 
 def _maybe_autoload_default_corpus(corpus_id: str) -> None:
-    if corpus_id != "default":
+    if corpus_id != _resolve_default_corpus_id():
         return
+    if not service.corpus_exists(corpus_id):
+        _maybe_ingest_default_documents(corpus_id)
     if service.corpus_exists(corpus_id):
         return
     chunks_url = os.getenv("CHATBOT_CHUNKS_URL", "").strip()
@@ -405,19 +531,9 @@ def _log_chat_event_safe(record: ChatEventRecord) -> None:
         LOGGER.exception("Failed to persist chat event %s", record.event_id)
 
 
-def _extract_years_value(text: str) -> str:
-    import re
-
-    match = re.search(r"(\d+\+?)\s+years?", text, re.IGNORECASE)
-    return match.group(1) if match else ""
-
-
 def _build_fallback_answer(query: str, results: List[dict]) -> str:
     signals = analyze_query(query)
     intent = detect_intent_from_signals(signals)
-    query_tokens = tokenize(query)
-    asks_years = "year" in query_tokens or "years" in query_tokens
-    skill_entity = detect_skill_entity(query)
     top = results[0]
     second = results[1] if len(results) > 1 else {}
 
@@ -425,22 +541,14 @@ def _build_fallback_answer(query: str, results: List[dict]) -> str:
     if len(lines) < 2 and second:
         lines.extend(extract_best_sentences(str(second.get("snippet", "")), signals, 1))
     concise = " ".join(lines).strip()
-    years_value = _extract_years_value(
-        f"{top.get('snippet', '')} {second.get('snippet', '') if second else ''}"
-    )
-
-    if asks_years and skill_entity and years_value:
-        tech_label = "AWS" if skill_entity.lower() == "aws" else skill_entity.upper()
-        evidence = concise or "my portfolio highlights practical hands-on usage in project work."
-        return f"I have about {years_value} years of experience working with {tech_label}. {evidence}"[:420]
 
     prefix_by_intent = {
-        "skills": "Based on my profile,",
-        "experience": "Based on my experience,",
-        "projects": "Based on my projects,",
-        "education": "From my education background,",
-        "contact": "You can reach me via the details in my profile,",
-        "general": "Here is what matches your question,",
+        "skills": "Based on the documents,",
+        "experience": "According to the documentation,",
+        "projects": "From the project documentation,",
+        "education": "From the education section,",
+        "contact": "The documents list the following contact details:",
+        "general": "Based on the provided documents,",
     }
     prefix = prefix_by_intent.get(intent, prefix_by_intent["general"])
     if not concise:
@@ -484,6 +592,9 @@ def _extract_chat_completion_text(payload: object) -> str:
 
 
 def _generate_with_hf(query: str, results: List[dict]) -> str:
+    if not _hf_answer_enabled():
+        return ""
+
     hf_api_url = os.getenv(
         "HF_CHAT_API_URL", "https://router.huggingface.co/v1/chat/completions"
     ).strip()
@@ -500,16 +611,9 @@ def _generate_with_hf(query: str, results: List[dict]) -> str:
     if not hf_api_url or not model_candidates:
         return ""
 
-    query_tokens = tokenize(query)
-    asks_years = "year" in query_tokens or "years" in query_tokens
-    skill_entity = detect_skill_entity(query)
     signals = analyze_query(query)
-    combined = " ".join(str(item.get("snippet", "")) for item in results[:2])
-    years_value = _extract_years_value(combined)
-    has_skill_evidence = bool(skill_entity and skill_entity.lower() in combined.lower())
     concise_hint = _build_fallback_answer(query, results)
 
-    # Provide short, highly relevant evidence lines instead of full chunks.
     evidence_lines: List[str] = []
     for item in results[:3]:
         best = extract_best_sentences(str(item.get("snippet", "")), signals, 2)
@@ -519,17 +623,11 @@ def _generate_with_hf(query: str, results: List[dict]) -> str:
     context = "\n".join(f"- {line.strip()}" for line in evidence_lines[:6] if line.strip())
 
     rules: List[str] = [
-        "You are an assistant for Rohit's portfolio chatbot.",
-        "Answer in first person as Rohit and keep the answer to 1-2 concise sentences.",
-        "Default to at most 2 short sentences unless the user explicitly asks for more detail.",
-        "Use only the provided evidence. Do not invent facts.",
-        "If the evidence clearly supports an answer, do not reply with uncertainty.",
+        "You are a documentation assistant.",
+        "Answer in 1-2 concise sentences using only the provided evidence.",
+        "Do not invent facts.",
+        "If the evidence supports an answer, respond directly without hedging.",
     ]
-    if asks_years and skill_entity and years_value and has_skill_evidence:
-        tech_label = "AWS" if skill_entity.lower() == "aws" else skill_entity.upper()
-        rules.append(
-            f"If asked about years with {tech_label}, use the evidence and answer as approximately {years_value} years."
-        )
     prompt = "\n".join(
         [
             "\n".join(rules),
@@ -592,6 +690,21 @@ def load_corpus(request_body: CorpusLoadRequest) -> CorpusLoadResponse:
     )
 
 
+@app.post("/corpora/ingest", response_model=CorpusIngestResponse)
+def ingest_corpus(request_body: CorpusIngestRequest) -> CorpusIngestResponse:
+    documents_root = _resolve_documents_root()
+    if request_body.documents_root:
+        override = Path(request_body.documents_root)
+        if not override.is_absolute():
+            override = (SERVICE_ROOT / override).resolve()
+        documents_root = override
+    return _ingest_from_documents_root(
+        corpus_id=request_body.corpus_id,
+        documents_root=documents_root,
+        build_vector_index=request_body.build_vector_index,
+    )
+
+
 @app.post("/search", response_model=SearchResponse)
 def search(request: SearchRequest) -> SearchResponse:
     _maybe_load_corpus_from_request(
@@ -632,9 +745,7 @@ def chat(request_body: ChatRequest) -> ChatResponse:
     )
     _maybe_autoload_default_corpus(request_body.corpus_id)
     allow_fallback = _resolve_allow_fallback(request_body)
-    method_requested = (
-        request_body.answer_method or ChatAnswerMethod.hugging_face_lightweight_nlp
-    )
+    method_requested = _resolve_answer_method(request_body.answer_method)
     rm = _resolve_retrieval_model(request_body.retrieval_model)
     if not service.corpus_exists(request_body.corpus_id):
         raise HTTPException(
@@ -658,7 +769,7 @@ def chat(request_body: ChatRequest) -> ChatResponse:
         no_results_answer = (
             NO_ANSWER_MESSAGE
             if not allow_fallback
-            else "I could not find a grounded answer in the current portfolio documents."
+            else "I could not find a grounded answer in the loaded documents."
         )
         _log_chat_event_safe(
             ChatEventRecord(

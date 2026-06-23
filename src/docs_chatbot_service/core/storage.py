@@ -17,6 +17,10 @@ class IndexStorage:
     def __init__(self, index_root: Path) -> None:
         self._index_root = index_root
 
+    @property
+    def index_root(self) -> Path:
+        return self._index_root
+
     def corpus_path(self, corpus_id: str) -> Path:
         return self._index_root / corpus_id / "chunks.json"
 

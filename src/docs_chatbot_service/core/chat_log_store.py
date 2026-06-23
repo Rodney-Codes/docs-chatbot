@@ -154,13 +154,17 @@ def get_store_diagnostics() -> Dict[str, Any]:
 
 
 def get_store() -> Optional[ChatLogStoreProtocol]:
-    """Return the in-memory store when enabled and initialized (tests call reset_store_for_tests)."""
+    """Return the in-memory store when enabled."""
 
+    global _GLOBAL_STORE
     if _GLOBAL_STORE is not None:
         return _GLOBAL_STORE
     if not _logging_enabled():
         return None
-    return None
+    with _GLOBAL_STORE_LOCK:
+        if _GLOBAL_STORE is None:
+            _GLOBAL_STORE = InMemoryChatLogStore()
+    return _GLOBAL_STORE
 
 
 def reset_store_for_tests() -> ChatLogStoreProtocol:

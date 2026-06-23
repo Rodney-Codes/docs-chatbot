@@ -12,3 +12,7 @@ data/index/
 dist/
 build/
 *.egg-info/
+
+# Local test documents (content is not committed)
+documents/*
+!documents/README.md

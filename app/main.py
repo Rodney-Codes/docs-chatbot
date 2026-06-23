@@ -23,4 +23,5 @@ def _rebind_service_index_root() -> None:
 
 
 _rebind_service_index_root()
+app_module.ingest_documents_on_startup()
 app = app_module.app

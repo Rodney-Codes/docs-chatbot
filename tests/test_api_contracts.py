@@ -45,11 +45,22 @@ class ApiContractTests(unittest.TestCase):
         corpus_dir = self.index_root / "portfolio-v1"
         corpus_dir.mkdir(parents=True, exist_ok=True)
         (corpus_dir / "chunks.json").write_text(json.dumps(SAMPLE_CHUNKS), encoding="utf-8")
+        self._previous_env = {
+            "CHAT_ALLOW_FALLBACK": os.environ.get("CHAT_ALLOW_FALLBACK"),
+            "HF_API_ENABLED": os.environ.get("HF_API_ENABLED"),
+        }
+        os.environ["CHAT_ALLOW_FALLBACK"] = "true"
+        os.environ["HF_API_ENABLED"] = "false"
         cls_module.reset_store_for_tests()
         app_module.service = app_module.RetrievalService(index_root=self.index_root)
         self.client = TestClient(app_module.app)
 
     def tearDown(self) -> None:
+        for key, value in self._previous_env.items():
+            if value is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = value
         self.tmp.cleanup()
 
     def test_search_contract_shape(self) -> None:
@@ -144,6 +155,8 @@ class ApiContractTests(unittest.TestCase):
         self.assertIn("source", payload)
         self.assertIn("used_hf", payload)
         self.assertIn("method", payload)
+        self.assertEqual(payload["method"], "lightweight_nlp")
+        self.assertFalse(payload["used_hf"])
         self.assertEqual(payload["retrieval_model"], "bm25_hashed_vector")
         self.assertTrue(payload["event_id"])
         self.assertTrue(payload["session_id"])
@@ -274,11 +287,12 @@ class ApiContractTests(unittest.TestCase):
                 "query": "python skills",
                 "corpus_id": "portfolio-v1",
                 "answer_method": "hugging_face",
+                "allow_fallback": True,
             },
         )
         self.assertEqual(response.status_code, 200)
         payload = response.json()
-        self.assertIn(payload["method"], ("hugging_face", "none"))
+        self.assertIn(payload["method"], ("hugging_face", "lightweight_nlp", "none"))
         if payload["method"] == "hugging_face":
             self.assertTrue(payload["used_hf"])
             self.assertTrue(payload["answer"].strip())
@@ -300,6 +314,34 @@ class ApiContractTests(unittest.TestCase):
         payload = response.json()
         self.assertIn(payload["method"], ("hugging_face", "lightweight_nlp"))
         self.assertEqual(payload["retrieval_model"], "bm25_hashed_vector")
+
+    def test_corpora_ingest_from_documents_directory(self) -> None:
+        docs_dir = Path(self.tmp.name) / "source_docs"
+        docs_dir.mkdir(parents=True, exist_ok=True)
+        (docs_dir / "guide.md").write_text(
+            "# Guide\n\n## Setup\n\nInstall dependencies with pip.\n",
+            encoding="utf-8",
+        )
+        response = self.client.post(
+            "/corpora/ingest",
+            json={
+                "corpus_id": "ingested-v1",
+                "documents_root": str(docs_dir),
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        payload = response.json()
+        self.assertEqual(payload["corpus_id"], "ingested-v1")
+        self.assertEqual(payload["documents_found"], 1)
+        self.assertGreaterEqual(payload["chunks_written"], 1)
+        self.assertTrue(payload["vector_index_built"])
+
+        chat_response = self.client.post(
+            "/chat",
+            json={"query": "pip install dependencies", "corpus_id": "ingested-v1"},
+        )
+        self.assertEqual(chat_response.status_code, 200)
+        self.assertIn("pip", chat_response.json()["answer"].lower())
 
     def test_chat_invalid_answer_method_is_422(self) -> None:
         response = self.client.post(
